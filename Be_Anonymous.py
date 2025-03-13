@@ -174,7 +174,7 @@ def list_commands():
     print("--allowed -- Only Allowed Commands")
 
 def clear():
-    if platform.system() == "Unix":
+    if platform.system() == "Linux" # Unix-like systems
         subprocess.run(["clear"])
 
 def allowed():
