@@ -12,7 +12,6 @@ from cryptography.fernet import Fernet
 
 # Verified if windows if windows close windows
 if platform.system() == "Windows":
-    print("Este script solo funciona en sistemas operativos Linux.")
     sys.exit()
 
 # Generate a key for encryption and decryption
@@ -177,8 +176,6 @@ def list_commands():
 def clear():
     if platform.system() == "Unix":
         subprocess.run(["clear"])
-    else:
-        subprocess.run(["cls"])
 
 def allowed():
     print("ONLY VALID COMMANDS:")
@@ -191,7 +188,7 @@ def allowed():
 # Main function
 def main():
     while True:
-        print("PROTOCOL DUCK")
+        print("Be_Anonymous")
         command = input("Enter the command you want to execute (Use --list to see the command face): ")
 
         if command.lower() == '--exit':
