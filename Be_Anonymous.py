@@ -10,7 +10,7 @@ import json
 import shlex
 from cryptography.fernet import Fernet
 
-# Verificar si el sistema operativo es Windows y salir si es así
+# Verified if windows if windows close windows
 if platform.system() == "Windows":
     print("Este script solo funciona en sistemas operativos Linux.")
     sys.exit()
