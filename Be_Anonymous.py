@@ -174,9 +174,9 @@ def list_commands():
     print("--allowed -- Only Allowed Commands")
 
 def clear():
-    if platform.system() == "Linux" # Unix-like systems
+    if platform.system() == "Linux": # Unix-like systems
         subprocess.run(["clear"])
-
+        
 def allowed():
     print("ONLY VALID COMMANDS:")
     print("nmap -p 80 --script=http-vuln-* example.com")
