@@ -185,6 +185,13 @@ def allowed():
     print("wpscan --url http://example.com")
     print("wapiti -u http://example.com")
 
+# Function to handle SIGINT (Ctrl+C)
+def signal_handler(sig, frame):
+    print("\nCtrl+C detected. Terminating processes...")
+    if tor_process:
+        tor_process.terminate()
+    sys.exit(0)
+
 # Main function
 def main():
     while True:
