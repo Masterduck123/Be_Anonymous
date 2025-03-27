@@ -9,8 +9,9 @@ import time
 import json
 import shlex
 from cryptography.fernet import Fernet
+import signal
 
-# Verified if windows if windows close windows
+# Verified if windows, if windows close windows
 if platform.system() == "Windows":
     sys.exit()
 
@@ -18,15 +19,17 @@ if platform.system() == "Windows":
 def generate_key():
     return Fernet.generate_key()
 
-# Save the key to a file
-def save_key(key, filename):
-    with open(filename, 'wb') as key_file:
-        key_file.write(key)
+# Save the key to an environment variable
+def save_key_to_env(key):
+    os.environ['ENCRYPTION_KEY'] = key.decode()
 
-# Load the key from a file
-def load_key(filename):
-    with open(filename, 'rb') as key_file:
-        return key_file.read()
+# Load the key from an environment variable
+def load_key_from_env():
+    try:
+        return os.environ['ENCRYPTION_KEY'].encode()
+    except KeyError:
+        print("Encryption key not found in environment variables.")
+        sys.exit(1)
 
 # Function to encrypt data
 def encrypt_data(data, key):
@@ -39,17 +42,11 @@ def decrypt_data(data, key):
     return fernet.decrypt(data).decode()
 
 # Load or generate encryption key
-key_file = "secret.key"
-if not os.path.exists(key_file):
+if 'ENCRYPTION_KEY' not in os.environ:
     key = generate_key()
-    save_key(key, key_file)
-    os.chmod(key_file, 0o600)  # Set file permissions to read/write for the owner only
+    save_key_to_env(key)
 else:
-    try:
-        key = load_key(key_file)
-    except Exception as e:
-        print(f"Error loading the key: {e}")
-        sys.exit(1)
+    key = load_key_from_env()
 
 # Function to check if a command is installed
 def is_command_installed(command):
@@ -59,14 +56,25 @@ def is_command_installed(command):
     except FileNotFoundError:
         return False
 
+# Function to check if Tor is running
+def is_tor_running():
+    try:
+        response = requests.get("http://127.0.0.1:9050", timeout=5)
+        return response.status_code == 200
+    except requests.ConnectionError:
+        return False
+
 # Function to start Tor using subprocess
 def start_tor():
     if not is_command_installed("tor"):
         print("Tor is not installed. Please install Tor to proceed.")
         return None
     try:
+        if is_tor_running():
+            print("Tor is already running.")
+            return None
         tor_process = subprocess.Popen(["tor"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        for _ in range(10):  # Poll the tor process for up to 10 seconds
+        for _ in range(30):  # Poll the tor process for up to 30 seconds
             if tor_process.poll() is None:
                 time.sleep(1)
             else:
@@ -78,8 +86,12 @@ def start_tor():
 
 # Function to configure the Tor proxy
 def configure_tor_proxy():
-    socks.set_default_proxy(socks.SOCKS5, "127.0.0.1", 9050)
-    socket.socket = socks.socksocket
+    try:
+        socks.set_default_proxy(socks.SOCKS5, "127.0.0.1", 9050)
+        socket.socket = socks.socksocket
+    except Exception as e:
+        print(f"Error configuring Tor proxy: {e}")
+        sys.exit(1)
 
 # Function to check the public IP via Tor
 def check_ip_via_tor():
@@ -102,6 +114,7 @@ def execute_command(command):
         print("Please enter a command.")
         return
 
+    command = decrypt_data(command, key)  # Decrypt the command before execution
     allowed_commands = ['nmap', 'nikto', 'wpscan', 'wapiti']
     command_parts = shlex.split(command)
 
@@ -131,7 +144,7 @@ def execute_command(command):
 
     try:
         tor_process = start_tor()
-        if not tor_process:
+        if not tor_process and not is_tor_running():
             return
 
         configure_tor_proxy()
@@ -140,14 +153,16 @@ def execute_command(command):
             print("Error: The connection is not using Tor.")
             user_input = input("Do you want to close the program? (yes/no): ").strip().lower()
             if user_input == 'yes':
-                tor_process.terminate()
+                if tor_process:
+                    tor_process.terminate()
                 return
             else:
                 print("Continuing without Tor...")
 
         if not is_command_installed(command_parts[0]):
             print(f"{command_parts[0]} is not installed. Please install it to proceed.")
-            tor_process.terminate()
+            if tor_process:
+                tor_process.terminate()
             return
 
         process = subprocess.Popen(command_parts, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -158,6 +173,9 @@ def execute_command(command):
                 break
             if output:
                 print(output.strip())
+                
+        for error in process.stderr:
+            print("ERROR: ", error.strip())
 
         process.terminate()
 
@@ -176,14 +194,18 @@ def list_commands():
 def clear():
     if platform.system() == "Linux": # Unix-like systems
         subprocess.run(["clear"])
-        
+
 def allowed():
     print("ONLY VALID COMMANDS:")
     print("nmap -p 80 --script=http-vuln-* example.com")
     print("nmap -p 443 --script=http-vuln-* example.com")
     print("nikto -h http://example.com")
     print("wpscan --url http://example.com")
+    print("wpscan --url http://example.com -e u,p")
     print("wapiti -u http://example.com")
+
+# Global variable for tor_process
+tor_process = None
 
 # Function to handle SIGINT (Ctrl+C)
 def signal_handler(sig, frame):
@@ -192,8 +214,12 @@ def signal_handler(sig, frame):
         tor_process.terminate()
     sys.exit(0)
 
+# Register the signal handler
+signal.signal(signal.SIGINT, signal_handler)
+
 # Main function
 def main():
+    global tor_process
     while True:
         print("Be_Anonymous")
         command = input("Enter the command you want to execute (Use --list to see the command face): ")
@@ -207,7 +233,9 @@ def main():
         elif command.lower() == '--allowed':
             allowed()
         else:
-            execute_command(command)
+            # Encrypt the command before execution
+            encrypted_command = encrypt_data(command, key)
+            execute_command(encrypted_command)
 
 # Start the application
 if __name__ == "__main__":
