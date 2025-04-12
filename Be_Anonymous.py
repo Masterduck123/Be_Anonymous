@@ -9,6 +9,7 @@ import shlex
 import signal
 import re
 from cryptography.fernet import Fernet, InvalidToken
+from threading import Thread
 
 # Verified if windows, if windows close windows
 if platform.system() == "Windows":
@@ -76,6 +77,18 @@ def is_tor_running():
         print(f"Error checking if Tor is running: {e}")
         return False
 
+# Function to monitor Tor process output
+def monitor_tor_output(process, flag):
+    try:
+        for line in iter(process.stdout.readline, b''):
+            decoded_line = line.decode()
+            print(decoded_line.strip())
+            if "Bootstrapped 100%" in decoded_line:
+                flag[0] = True
+                break
+    except Exception as e:
+        print(f"Error reading Tor process output: {e}")
+
 # Function to start Tor using subprocess
 def start_tor():
     if not is_command_installed("tor"):
@@ -85,27 +98,32 @@ def start_tor():
         if is_tor_running():
             print("Tor is already running.")
             return None
-        tor_process = subprocess.Popen(["tor"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        tor_process = subprocess.Popen(
+            ["tor"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+
+        bootstrapped_flag = [False]
+        monitor_thread = Thread(target=monitor_tor_output, args=(tor_process, bootstrapped_flag))
+        monitor_thread.start()
+
         for _ in range(30):  # Poll the tor process for up to 30 seconds
-            if tor_process.poll() is None:
-                output = tor_process.stdout.readline().decode()
-                if "Bootstrapped 100%" in output:
-                    return tor_process
-                time.sleep(1)
-            else:
-                raise Exception("Tor process failed to start.")
-        return tor_process
+            if bootstrapped_flag[0]:
+                return tor_process
+            time.sleep(1)
+
+        if not bootstrapped_flag[0]:
+            raise Exception("Tor process failed to bootstrap.")
     except Exception as e:
         print(f"Error starting Tor: {e}")
-        if tor_process:
-            stderr_output = tor_process.stderr.read().decode()
+        if 'tor_process' in locals() and tor_process:
+            stderr_output = tor_process.stderr.read()
             print(f"Tor stderr: {stderr_output}")
         return None
 
 # Function to configure the Tor proxy
 def configure_tor_proxy():
     try:
-        # Removed the global socket overwrite
         pass
     except Exception as e:
         print(f"Error configuring Tor proxy: {e}")
@@ -130,7 +148,7 @@ def check_ip_via_tor():
 allowed_commands = {
     "nmap": r"^nmap\s+-p\s+(80|443)\s+--script=http-vuln-.*\s+\S+$",
     "nikto": r"^nikto\s+-h\s+\S+$",
-    "wpscan": r"^wpscan\s+--url\s+\S+",
+    "wpscan": r"^wpscan\s+--url\s+\S+$",
     "wapiti": r"^wapiti\s+-u\s+\S+$",
     "sqlmap": r"^sqlmap\s+--url\s+\S+\s+--(dbs|batch|forms)"
 }
@@ -168,6 +186,8 @@ def execute_command(command):
 
     try:
         tor_process = start_tor()
+        should_terminate = tor_process is not None
+
         if not tor_process and not is_tor_running():
             return
 
@@ -185,7 +205,7 @@ def execute_command(command):
 
         if not is_command_installed(command_parts[1]):  # Check if the tool is installed
             print(f"{command_parts[1]} is not installed. Please install it to proceed.")
-            if tor_process:
+            if tor_process and should_terminate:
                 tor_process.terminate()
             return
 
@@ -205,7 +225,7 @@ def execute_command(command):
     except Exception as e:
         print(f"Unexpected error: {e}")
     finally:
-        if tor_process and tor_process.poll() is None:
+        if tor_process and tor_process.poll() is None and should_terminate:
             tor_process.terminate()
 
 # Function to handle SIGINT (Ctrl+C)
