@@ -36,10 +36,15 @@ def load_key_from_file():
             Fernet(key)
             return key
     except (FileNotFoundError, InvalidToken):
-        print("Invalid or missing encryption key. Generating a new one...")
-        key = generate_key()
-        save_key_to_file(key)
-        return key
+        print("Invalid or missing encryption key.")
+        user_input = input("Do you want to regenerate the key? This may result in data loss (yes/no): ").strip().lower()
+        if user_input == "yes":
+            key = generate_key()
+            save_key_to_file(key)
+            return key
+        else:
+            print("Exiting program to avoid data loss.")
+            sys.exit(1)
 
 # Load or generate encryption key
 key = load_key_from_file()
@@ -77,6 +82,22 @@ def is_tor_running():
         print(f"Error checking if Tor is running: {e}")
         return False
 
+# Function to verify if Tor is healthy
+def is_tor_healthy():
+    try:
+        session = requests.Session()
+        session.proxies = {
+            'http': 'socks5h://127.0.0.1:9050',
+            'https': 'socks5h://127.0.0.1:9050'
+        }
+        response = session.get("https://check.torproject.org/api/ip", timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("IsTor", False)  # Returns True if using Tor
+        return False
+    except requests.exceptions.RequestException:
+        return False
+
 # Function to monitor Tor process output
 def monitor_tor_output(process, flag):
     try:
@@ -95,9 +116,12 @@ def start_tor():
         print("Tor is not installed. Please install Tor to proceed.")
         return None
     try:
-        if is_tor_running():
-            print("Tor is already running.")
+        if is_tor_running() and is_tor_healthy():
+            print("Tor is already running and healthy.")
             return None
+        elif is_tor_running():
+            print("Tor is running but may not be healthy. Attempting to restart...")
+            stop_tor(None)  # Stop existing Tor process
 
         tor_process = subprocess.Popen(
             ["tor"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
@@ -116,15 +140,58 @@ def start_tor():
             raise Exception("Tor process failed to bootstrap.")
     except Exception as e:
         print(f"Error starting Tor: {e}")
+        if 'monitor_thread' in locals():
+            monitor_thread.join(timeout=1)  # Ensure the thread cleans up
         if 'tor_process' in locals() and tor_process:
             stderr_output = tor_process.stderr.read()
             print(f"Tor stderr: {stderr_output}")
         return None
 
+# Function to stop the Tor process
+def stop_tor(tor_process):
+    if tor_process and tor_process.poll() is None:
+        try:
+            tor_process.terminate()
+            tor_process.wait()
+            print("Tor process terminated successfully.")
+        except Exception as e:
+            print(f"Error terminating Tor process: {e}")
+
+# Function to detect the torsocks configuration file path dynamically
+def get_torsocks_conf_path():
+    possible_paths = [
+        "/etc/tor/torsocks.conf",
+        "/usr/local/etc/tor/torsocks.conf",
+        "/usr/etc/tor/torsocks.conf"
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    return None
+
 # Function to configure the Tor proxy
 def configure_tor_proxy():
     try:
-        pass
+        torsocks_conf_path = get_torsocks_conf_path()
+        if not torsocks_conf_path:
+            print("Could not find torsocks configuration file. Please locate it manually.")
+            return
+
+        # Check if torsocks is installed
+        if not is_command_installed("torsocks"):
+            print("Torsocks is not installed. Please install it.")
+            return
+
+        # Check if torsocks.conf exists and modify if necessary
+        with open(torsocks_conf_path, "r") as file:
+            content = file.read()
+
+        if "TorAddress 127.0.0.1" not in content:
+            with open(torsocks_conf_path, "a") as file:
+                file.write("\nTorAddress 127.0.0.1\n")
+
+        print("Torsocks configuration validated or updated.")
+
     except Exception as e:
         print(f"Error configuring Tor proxy: {e}")
         sys.exit(1)
@@ -137,11 +204,14 @@ def check_ip_via_tor():
             'http': 'socks5h://127.0.0.1:9050',
             'https': 'socks5h://127.0.0.1:9050'
         }
-        response = session.get("https://check.torproject.org/api/ip")
+        response = session.get("https://check.torproject.org/api/ip", timeout=10)
+        if response.status_code != 200:
+            print(f"HTTP Error: Received status code {response.status_code}")
+            return False
         data = response.json()
-        return data["IsTor"]  # Returns True if using Tor, False if not
+        return data["IsTor"]  # Returns True if using Tor
     except requests.exceptions.RequestException as e:
-        print(f"Error checking the IP: {e}")
+        print(f"Error checking the IP via Tor: {e}")
         return False
 
 # Allowed commands and their validation patterns
@@ -184,6 +254,8 @@ def execute_command(command):
     # Prepend 'torsocks' to force all traffic through Tor
     command_parts.insert(0, "torsocks")
 
+    tor_process = None
+    should_terminate = False
     try:
         tor_process = start_tor()
         should_terminate = tor_process is not None
@@ -197,16 +269,12 @@ def execute_command(command):
             print("Error: The connection is not using Tor.")
             user_input = input("Do you want to close the program? (yes/no): ").strip().lower()
             if user_input == 'yes':
-                if tor_process:
-                    tor_process.terminate()
                 return
             else:
                 print("Continuing without Tor...")
 
         if not is_command_installed(command_parts[1]):  # Check if the tool is installed
             print(f"{command_parts[1]} is not installed. Please install it to proceed.")
-            if tor_process and should_terminate:
-                tor_process.terminate()
             return
 
         # Execute the command securely
@@ -225,8 +293,8 @@ def execute_command(command):
     except Exception as e:
         print(f"Unexpected error: {e}")
     finally:
-        if tor_process and tor_process.poll() is None and should_terminate:
-            tor_process.terminate()
+        if should_terminate:
+            stop_tor(tor_process)
 
 # Function to handle SIGINT (Ctrl+C)
 def signal_handler(sig, frame):
