@@ -12,7 +12,7 @@ Be_Anonymous is a cybersecurity and anonymity script that allows executing web s
 ## Installation
 1. Clone the repository:
     ```bash
-    git clone https://github.com/YourUsername/Be_Anonymous.git
+    git clone https://github.com/Masterduck123/Be_Anonymous.git
     ```
 2. Navigate to the project directory:
     ```bash
