@@ -214,21 +214,33 @@ def check_ip_via_tor():
         print(f"Error checking the IP via Tor: {e}")
         return False
 
-# Allowed commands and their validation patterns
-allowed_commands = {
-    "nmap": r"^nmap\s+-p\s+(80|443)\s+--script=http-vuln-.*\s+\S+$",
-    "nikto": r"^nikto\s+-h\s+\S+$",
-    "wpscan": r"^wpscan\s+--url\s+\S+$",
-    "wapiti": r"^wapiti\s+-u\s+\S+$",
-    "sqlmap": r"^sqlmap\s+--url\s+\S+\s+--(dbs|batch|forms)"
-}
+# List of forbidden patterns for security
+FORBIDDEN_PATTERNS = [
+    r";",          # Command chaining
+    r"&",          # Command chaining/background
+    r"\|",         # Pipes
+    r"`",          # Backticks
+    r"\$\(.*\)",   # Command substitution
+    r">",          # Output redirection
+    r"<",          # Input redirection
+    r"rm\s+-rf\s+/", # Dangerous: delete root
+    r"shutdown",   # System shutdown
+    r"reboot",     # System reboot
+]
 
-# Function to validate if a command matches the allowed patterns
 def is_valid_command(command):
-    for cmd, pattern in allowed_commands.items():
-        if command.startswith(cmd) and re.match(pattern, command):
-            return True
-    return False
+    # Disallow empty or whitespace-only commands
+    if not command.strip():
+        print("Error: Command is empty.")
+        return False
+
+    # Check for forbidden patterns
+    for pattern in FORBIDDEN_PATTERNS:
+        if re.search(pattern, command):
+            print(f"Error: Command blocked for security (pattern: {pattern})")
+            return False
+
+    return True
 
 # Function to execute a command via Tor
 def execute_command(command):
@@ -309,28 +321,27 @@ def list_commands():
     print("--list -- The List")
     print("--clear -- Clear The Terminal")
     print("--exit -- Exit")
-    print("--allowed -- Only Allowed Commands")
+    print("--help -- User-Help Commands")
 
 # Function to clear the terminal screen
 def clear():
     if os.name == "posix":  # Unix-like systems
         subprocess.run(["clear"])
 
-# Function to display allowed commands
-def allowed():
-    print("ONLY VALID COMMANDS:")
-    print("nmap -p 80 --script=http-vuln-* example.com")
-    print("nmap -p 443 --script=http-vuln-* example.com")
-    print("nikto -h http://example.com")
-    print("wpscan --url http://example.com")
-    print("wpscan --url http://example.com -e u,p")
-    print("wapiti -u http://example.com")
-    print("sqlmap --url http://example.com --dbs --batch --forms")
+# Function to user-help
+def help():
+    print("¿How works Anom?")
+    print("It´s a script for be Anom when you use variable tools")
 
 # Main function
 def main():
     while True:
-        print("Be_Anonymous")
+        print("  #   ##   ##   #   #         #")
+        print(" ###  ###  ##  ###  ##       ##")
+        print("## ## #### ## ## ## ####   ####")
+        print("##### ## #### ## ## ## ## ## ##")
+        print("## ## ##  ###  ###  ##  ###  ##")
+        print("## ## ##  ###   #   ##   #   ##")
         command = input("Enter the command you want to execute (Use --list to see the command face): ")
 
         if command.lower() == '--exit':
@@ -339,8 +350,8 @@ def main():
             list_commands()
         elif command.lower() == '--clear':
             clear()
-        elif command.lower() == '--allowed':
-            allowed()
+        elif command.lower() == '--help':
+            help()
         else:
             # Encrypt the command before execution
             encrypted_command = encrypt_data(command, key)
