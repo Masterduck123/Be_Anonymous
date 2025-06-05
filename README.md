@@ -66,7 +66,4 @@ Contributions are welcome! Please open an issue or a pull request to suggest cha
 ## Authors
 
 - [Masterduck123](https://github.com/Masterduck123)
-
-## License
-
-This project is licensed under the MIT License.
+- 
