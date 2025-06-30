@@ -18,6 +18,12 @@ if platform.system() == "Windows":
 # Define the key file name
 KEY_FILE = "encryption_key.key"
 
+# Generate a key if no exist
+def create_key_if_not_exists():
+    if not os.path.exists(KEY_FILE):
+        key = generate_key()
+        save_key_to_file(key)
+
 # Function to generate a new encryption key
 def generate_key():
     return Fernet.generate_key()
@@ -219,7 +225,7 @@ FORBIDDEN_PATTERNS = [
     r";",          # Command chaining
     r"&",          # Command chaining/background
     r"\|",         # Pipes
-    r"`",          # Backticks
+    r"",          # Backticks
     r"\$\(.*\)",   # Command substitution
     r">",          # Output redirection
     r"<",          # Input redirection
@@ -308,13 +314,14 @@ def execute_command(command):
         if should_terminate:
             stop_tor(tor_process)
 
-# Function to handle SIGINT (Ctrl+C)
-def signal_handler(sig, frame):
-    print("\nCtrl+C detected. Terminating processes...")
+# Handle Ctrl+C and SIGTERM
+def signal_handler(sig=None, frame=None):
+    print("\n[!] Ctrl+C detected. Exiting gracefully...")
     sys.exit(0)
-
-# Register the signal handler
-signal.signal(signal.SIGINT, signal_handler)
+    
+# Register signal handler for Ctrl+C and kill
+signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+signal.signal(signal.SIGTERM, signal_handler)  # kill <PID>
 
 # Function to list available commands
 def list_commands():
@@ -331,17 +338,18 @@ def clear():
 # Function to user-help
 def help():
     print("¿How works Anom?")
-    print("It´s a script for be Anom when you use variable tools")
+    print("Its a script for be Anom when you use variable tools")
 
 # Main function
 def main():
     while True:
-        print("  #   ##   ##   #   #         #")
-        print(" ###  ###  ##  ###  ##       ##")
-        print("## ## #### ## ## ## ####   ####")
-        print("##### ## #### ## ## ## ## ## ##")
-        print("## ## ##  ###  ###  ##  ###  ##")
-        print("## ## ##  ###   #   ##   #   ##")
+        print(" ________  ________   ________  _____ ______")
+        print("|\\   __  \\|\\   ___  \\|\\   __  \\|\\   _ \\  _   \\")
+        print("\\ \\  \\|\\  \\ \\  \\\\ \\  \\ \\  \\|\\  \\ \\  \\\\\\__\\ \\  \\")
+        print(" \\ \\   __  \\ \\  \\\\ \\  \\ \\  \\\\\\  \\ \\  \\\\|__| \\  \\")
+        print("  \\ \\  \\ \\  \\ \\  \\\\ \\  \\ \\  \\\\\\  \\ \\  \\    \\ \\  \\")
+        print("   \\ \\__\\ \\__\\ \\__\\\\ \\__\\ \\_______\\ \\__\\    \\ \\__\\")
+        print("    \\|__|\\|__|\\|__| \\|__|\\|_______|\\|__|     \\|__|")
         command = input("Enter the command you want to execute (Use --list to see the command face): ")
 
         if command.lower() == '--exit':
